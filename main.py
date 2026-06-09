@@ -1,7 +1,7 @@
 import sys
 import pygame
 
-from core.constants import WIDTH, HEIGHT, SCENE_MAIN, SCENE_SETTINGS, SCENE_STORY
+from core.constants import WIDTH, HEIGHT, SCENE_MAIN, SCENE_SETTINGS, SCENE_STORY, SCENE_GAME
 from core.fonts     import init_fonts
 from ui.particles   import ParticleSystem, make_scanline_surf
 from ui.draw        import draw_background, draw_title_bar, draw_corners
@@ -27,7 +27,8 @@ def build_scenes():
         SCENE_MAIN:     MainMenuScene(screen, fonts, shared),
         SCENE_SETTINGS: SettingsScene(screen, fonts, shared),
         SCENE_STORY:    StoryScene(screen, fonts, shared),
-        # SCENE_GAME: BossScene(screen, fonts, shared),  # TODO
+        # TODO: 실제 게임 씬 구현 전까지 임시로 스토리 씬으로 라우팅
+        SCENE_GAME:     StoryScene(screen, fonts, shared),
     }
 
 scenes      = build_scenes()
