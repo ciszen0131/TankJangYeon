@@ -9,6 +9,7 @@ from ui.draw        import draw_background, draw_title_bar, draw_corners
 from scenes.main_menu import MainMenuScene
 from scenes.settings  import SettingsScene
 from scenes.story     import StoryScene
+from scenes.game      import GameScene
 
 # ── pygame 초기화 ────────────────────────────────────────────
 pygame.init()
@@ -27,8 +28,7 @@ def build_scenes():
         SCENE_MAIN:     MainMenuScene(screen, fonts, shared),
         SCENE_SETTINGS: SettingsScene(screen, fonts, shared),
         SCENE_STORY:    StoryScene(screen, fonts, shared),
-        # TODO: 실제 게임 씬 구현 전까지 임시로 스토리 씬으로 라우팅
-        SCENE_GAME:     StoryScene(screen, fonts, shared),
+        SCENE_GAME:     GameScene(screen, fonts, shared),
     }
 
 scenes      = build_scenes()

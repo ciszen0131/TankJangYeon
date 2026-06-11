@@ -2,7 +2,7 @@ import pygame
 from scenes.base import Scene
 from core.constants import (
     SCENE_SETTINGS, SCENE_STORY, SCENE_GAME,
-    BLACK, WHITE, YELLOW, GRAY, DGRAY, RED, WIDTH, HEIGHT
+    BLACK, WHITE, YELLOW, GRAY, DGRAY, RED, CYAN, WIDTH, HEIGHT
 )
 from ui.draw import draw_box, draw_text_outline, draw_heart_selector
 
@@ -14,6 +14,7 @@ class MainMenuScene(Scene):
         super().__init__(screen, fonts, shared)
         self.selected = 0
         self.blink    = 0
+        self.boot_scroll = 0
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type != pygame.KEYDOWN:
@@ -39,14 +40,36 @@ class MainMenuScene(Scene):
 
     def update(self, dt: int) -> None:
         self.blink += 1
+        self.boot_scroll = (self.boot_scroll + 1) % 120
 
     def draw(self, surf: pygame.Surface) -> None:
-        menu_box = pygame.Rect(220, 175, 360, 220)
+        surf.fill((8, 8, 10))
+
+        for y in range(0, HEIGHT, 24):
+            pygame.draw.line(surf, (16, 16, 20), (0, y), (WIDTH, y), 1)
+
+        log_font = self.fonts["small"]
+        logs = [
+            "SYSTEM BOOT...",
+            "PROTO-0 CONNECTED",
+            "ZERO HOSTILE SIGNAL DETECTED",
+            "DO NOT LOSE CORE STABILITY",
+        ]
+        for i, text in enumerate(logs):
+            if (self.boot_scroll + i * 24) % 48 < 24:
+                surf.blit(log_font.render(text, False, CYAN), (40, 36 + i * 18))
+
+        menu_box = pygame.Rect(220, 170, 360, 228)
         pygame.draw.rect(surf, BLACK, menu_box)
-        draw_box(surf, menu_box, WHITE, 3)
+        draw_box(surf, menu_box, CYAN, 3)
+
+        title = self.fonts["title"].render("SYSTEM BOOT", False, CYAN)
+        surf.blit(title, (WIDTH // 2 - title.get_width() // 2, 118))
+        sub = self.fonts["small"].render("PROTO-0 / TANK FRONT", False, GRAY)
+        surf.blit(sub, (WIDTH // 2 - sub.get_width() // 2, 154))
 
         for i, item in enumerate(ITEMS):
-            iy     = menu_box.y + 18 + i * 48
+            iy     = menu_box.y + 22 + i * 48
             is_sel = (i == self.selected)
 
             if is_sel:
