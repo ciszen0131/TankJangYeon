@@ -949,11 +949,67 @@ class GameScene(Scene):
             self._draw_center_banner(surf, "MISSION FAILED", RED)
 
     def _draw_boss(self, surf: pygame.Surface) -> None:
-        pygame.draw.rect(surf, RED, self.boss_rect)
-        draw_box(surf, self.boss_rect, WHITE, 2)
-        label = self.fonts["small"].render("ZERO", False, WHITE)
-        surf.blit(label, (self.boss_rect.centerx - label.get_width() // 2, self.boss_rect.y - 18))
+        glow_color = PLAYER_COLORS["glow"] # 민트색
+        armor_color = (45, 45, 50)
+        accent_color = (80, 80, 85)
+        
+        centerx, centery = self.boss_rect.centerx, self.boss_rect.centery
 
+        # 후면 케이블 실루엣 (작살 케이블 잔해)
+        for idx in range(3):
+            angle = self.boss_move_timer * 2 + idx * (math.pi * 0.6)
+            offset_x = math.cos(angle) * 35
+            offset_y = math.sin(angle) * 20
+            pygame.draw.line(surf, (30, 30, 30), (centerx, centery), (centerx + offset_x, centery - 20 + offset_y), 4)
+
+        # 1. 메인 섀시 (조금 더 각진 다각형 구조)
+        main_poly = [
+            (centerx - 30, centery - 35),
+            (centerx + 30, centery - 35),
+            (centerx + 40, centery),
+            (centerx + 35, centery + 35),
+            (centerx - 35, centery + 35),
+            (centerx - 40, centery)
+        ]
+        pygame.draw.polygon(surf, armor_color, main_poly)
+        pygame.draw.polygon(surf, accent_color, main_poly, 3)
+        
+        # 2. ZERO의 광학 바이저 (크게 가로지르는 형태)
+        visor_rect = pygame.Rect(centerx - 28, centery - 15, 56, 12)
+        pygame.draw.rect(surf, (15, 15, 15), visor_rect, border_radius=4)
+        
+        # 바이저 발광 효과 (맥박치듯)
+        glow_width = int(50 + math.sin(self.boss_move_timer * 5) * 4)
+        glow_rect = pygame.Rect(0, 0, glow_width, 8)
+        glow_rect.center = visor_rect.center
+        pygame.draw.rect(surf, glow_color, glow_rect, border_radius=2)
+        
+        # 3. 송전탑 파츠 (상부)
+        pygame.draw.polygon(surf, (60, 60, 70), [
+            (centerx - 12, centery - 35),
+            (centerx + 12, centery - 35),
+            (centerx, centery - 55)
+        ])
+        if int(self.boss_move_timer * 10) % 3 == 0:
+            # 방전 이펙트
+            pygame.draw.circle(surf, (200, 255, 255), (centerx, centery - 55), 5)
+            pygame.draw.line(surf, (150, 255, 255), (centerx, centery - 55), (centerx - 8, centery - 65), 2)
+            pygame.draw.line(surf, (150, 255, 255), (centerx, centery - 55), (centerx + 6, centery - 60), 2)
+
+        # 4. 치료 코어 및 포대 잔해 (좌/우 어깨)
+        # 좌측: 치료 코어 파이프 느낌
+        pygame.draw.rect(surf, (30, 70, 50), (centerx - 45, centery - 5, 15, 25), border_radius=3)
+        pygame.draw.circle(surf, (90, 255, 120), (centerx - 37, centery + 5), 4)
+
+        # 우측: 중화기 포대 장갑
+        pygame.draw.rect(surf, (70, 30, 30), (centerx + 30, centery - 10, 20, 30), border_radius=4)
+        pygame.draw.rect(surf, DGRAY, (centerx + 50, centery + 5, 14, 6))
+
+        # 이름표
+        label = self.fonts["small"].render("ZERO", False, glow_color)
+        surf.blit(label, (centerx - label.get_width() // 2, centery - 75))
+
+        # 체력 바
         hp_ratio = self.boss_hp / max(1, self.boss_hp_max)
         hp_bar = pygame.Rect(PLAYFIELD.left + 90, PLAYFIELD.top + 18, PLAYFIELD.width - 180, 8)
         pygame.draw.rect(surf, DGRAY, hp_bar)
@@ -962,24 +1018,56 @@ class GameScene(Scene):
 
     def _draw_player(self, surf: pygame.Surface) -> None:
         invuln_flash = self.player_invuln > 0 and (self.blink // 4) % 2 == 0
-        body_color = (200, 220, 255) if invuln_flash else PLAYER_COLORS["body"]
+        suit_base = (200, 220, 255) if invuln_flash else (130, 95, 45)  # 낡고 큰 정비복
+        suit_shadow = (100, 70, 30)
+        armor_color = (255, 255, 255) if invuln_flash else (85, 95, 105) # 장갑
         glow_color = (255, 255, 255) if invuln_flash else PLAYER_COLORS["glow"]
 
-        center = (int(self.player_pos.x), int(self.player_pos.y))
-        body_rect = pygame.Rect(0, 0, 26, 32)
-        body_rect.center = center
-        helmet_rect = pygame.Rect(0, 0, 32, 26)
-        helmet_rect.midbottom = (center[0], center[1] - 6)
+        centerx, centery = int(self.player_pos.x), int(self.player_pos.y)
+        
+        # 1. 헐렁한 정비복 (바디) + 약간의 애니메이션(호흡)
+        breath = math.sin(self.boss_move_timer * 8) * 1.5
+        suit_rect = pygame.Rect(0, 0, 32, 36)
+        suit_rect.center = (centerx, centery + 4 + int(breath))
+        
+        # 옷 주름과 명암 표현
+        pygame.draw.rect(surf, suit_shadow, (suit_rect.x, suit_rect.y + 4, suit_rect.width, suit_rect.height), border_radius=8)
+        pygame.draw.rect(surf, suit_base, suit_rect, border_radius=8)
 
-        pygame.draw.circle(surf, glow_color, center, 16)
-        pygame.draw.rect(surf, body_color, body_rect)
-        pygame.draw.rect(surf, PLAYER_COLORS["trim"], body_rect, 2)
-        pygame.draw.rect(surf, (55, 55, 62), helmet_rect)
-        pygame.draw.rect(surf, PLAYER_COLORS["trim"], helmet_rect, 2)
-        visor = pygame.Rect(0, 0, 14, 8)
-        visor.center = (center[0] + 2, center[1] - 8)
-        pygame.draw.rect(surf, PLAYER_COLORS["visor"], visor)
-        pygame.draw.circle(surf, glow_color, (center[0], center[1] + 1), 4)
+        # 2. 미완성 수호 슈트 흉갑 (Chest Armor)
+        chest_points = [
+            (centerx - 14, centery - 8),
+            (centerx + 14, centery - 8),
+            (centerx + 8, centery + 4),
+            (centerx - 8, centery + 4)
+        ]
+        pygame.draw.polygon(surf, armor_color, chest_points)
+        pygame.draw.polygon(surf, PLAYER_COLORS["trim"], chest_points, 2)
+        
+        # 흉갑 정중앙의 민트색 동력 코어
+        pygame.draw.circle(surf, glow_color, (centerx, centery - 2), 5)
+        pygame.draw.circle(surf, WHITE, (centerx, centery - 2), 2) # 코어 하이라이트
+
+        # 3. 반쯤 깨진 헬멧
+        helmet_rect = pygame.Rect(0, 0, 28, 26)
+        helmet_rect.midbottom = (centerx, centery - 6)
+        pygame.draw.rect(surf, (40, 40, 45), helmet_rect, border_radius=10)
+        
+        # 바이저 백그라운드
+        dark_visor = pygame.Rect(0, 0, 20, 10)
+        dark_visor.center = (centerx, helmet_rect.centery + 2)
+        pygame.draw.rect(surf, (10, 10, 10), dark_visor)
+        
+        # 반파된 광학 바이저 (지그재그 패턴)
+        broken_points = [
+            (dark_visor.left, dark_visor.top),
+            (dark_visor.left + 12, dark_visor.top),
+            (dark_visor.left + 8, dark_visor.centery),
+            (dark_visor.left + 14, dark_visor.bottom),
+            (dark_visor.left, dark_visor.bottom)
+        ]
+        pygame.draw.polygon(surf, glow_color, broken_points)
+        pygame.draw.polygon(surf, (150, 255, 230), broken_points, 1) # 테두리 하이라이트
 
     def _draw_bullets(self, surf: pygame.Surface) -> None:
         for bullet in self.player_bullets:
