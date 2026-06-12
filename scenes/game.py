@@ -57,7 +57,8 @@ class GameScene(Scene):
         self.player_speed = 280.0
         self.player_focus_speed = 170.0
         self.player_hit_radius = 7
-        self.player_hp = 6
+        self.player_hp = 100
+        self.player_hp_max = 100
         self.player_invuln = 0.0
         self.fire_timer = 0.0
 
@@ -82,11 +83,28 @@ class GameScene(Scene):
         self.grapple_hit_flash = 0.0
         self.stun_timer = 0.0
         self.push_timer = 0.0
+        self.heavy_cast_timer = 0.0
+        self.heavy_cast_shot_timer = 0.0
+        self.heavy_safe_lane = pygame.Rect(0, 0, 0, 0)
+        self.heavy_safe_zones: list[pygame.Rect] = []
+        self.heavy_danger_zones: list[pygame.Rect] = []
+        self.heavy_hit_applied = False
+        self.heavy_reward_dropped = False
+        self.stun_wave_cast_timer = 0.0
+        self.center_flame_cast_timer = 0.0
+        self.center_flame_safe_zones: list[pygame.Rect] = []
+        self.center_flame_danger_zone = pygame.Rect(0, 0, 0, 0)
+        self.center_flames: list[dict] = []
+        self.center_flame_hit_applied = False
+        self.boss_kill_cheat_down = False
+        self.boss_kill_cheat_sequence = []
+        self.boss_kill_cheat_timer = 0.0
         self.boss_side = -1
 
         self.player_bullets: list[dict] = []
         self.enemy_bullets: list[dict] = []
         self.field_walls: list[dict] = []
+        self.heavy_lasers: list[dict] = []
         self.grapple_lines: list[dict] = []
         self.pickups: list[dict] = self._build_pickups()
 
@@ -139,12 +157,14 @@ class GameScene(Scene):
             return
 
         if item["kind"] == "heal":
-            self.player_hp = min(6, self.player_hp + 2)
+            self.player_hp = min(self.player_hp_max, self.player_hp + 20)
         elif item["kind"] == "shield":
             self.player_invuln = 2.5
         elif item["kind"] == "bomb":
             self.enemy_bullets.clear()
             self.field_walls.clear()
+            self.heavy_lasers.clear()
+            self.center_flames.clear()
             self.grapple_lines.clear()
             self.boss_hp = max(0, self.boss_hp - 10)
 
@@ -160,7 +180,15 @@ class GameScene(Scene):
             }
         )
 
-    def _spawn_enemy_bullet(self, angle: float, speed: float, color, radius: int = 5, origin=None) -> None:
+    def _spawn_enemy_bullet(
+        self,
+        angle: float,
+        speed: float,
+        color,
+        radius: int = 5,
+        origin=None,
+        damage: int = 5,
+    ) -> None:
         if origin is None:
             origin = pygame.Vector2(self.boss_pos.x, self.boss_pos.y + 30)
         self.enemy_bullets.append(
@@ -168,7 +196,8 @@ class GameScene(Scene):
                 "pos": pygame.Vector2(origin.x, origin.y),
                 "vel": pygame.Vector2(math.cos(angle) * speed, math.sin(angle) * speed),
                 "radius": radius,
-                "color": color,
+                "color": (255, 70, 70),
+                "damage": damage,
             }
         )
 
@@ -190,6 +219,17 @@ class GameScene(Scene):
         self.phase_banner_timer = 1.5
         self.enemy_bullets.clear()
         self.field_walls.clear()
+        self.heavy_lasers.clear()
+        self.heavy_safe_zones.clear()
+        self.heavy_danger_zones.clear()
+        self.heavy_hit_applied = False
+        self.heavy_reward_dropped = False
+        self.stun_wave_cast_timer = 0.0
+        self.center_flame_cast_timer = 0.0
+        self.center_flame_safe_zones.clear()
+        self.center_flame_danger_zone = pygame.Rect(0, 0, 0, 0)
+        self.center_flames.clear()
+        self.center_flame_hit_applied = False
         self.grapple_origin = None
         self.grapple_timer = 0.0
         self.grapple_hit_flash = 0.0
@@ -351,13 +391,101 @@ class GameScene(Scene):
             self._spawn_enemy_bullet(angle, 100 * speed_scale, (110, 240, 220), radius=4)
 
     def _spawn_side_pressure(self) -> None:
-        side = -1 if (self.phase_level + self.attack_index) % 2 == 0 else 1
-        side_y = PLAYFIELD.top + 44 if side < 0 else PLAYFIELD.bottom - 44
-        origin = pygame.Vector2(PLAYFIELD.left + 24, side_y)
         speed_scale, _ = self._phase_scale()
+        center_y = PLAYFIELD.centery + math.sin(self.attack_index * 0.8) * 54
         for step in range(7):
+            offset_y = (step - 3) * 18
+            y = max(PLAYFIELD.top + 30, min(PLAYFIELD.bottom - 30, center_y + offset_y))
             speed = (155 + step * 8) * speed_scale
-            self._spawn_enemy_bullet(0.0 if side < 0 else math.pi, speed, (255, 90, 200), radius=5, origin=origin)
+            left_origin = pygame.Vector2(PLAYFIELD.left + 18, y)
+            right_origin = pygame.Vector2(PLAYFIELD.right - 18, y)
+            self._spawn_enemy_bullet(0.0, speed, (255, 90, 200), radius=5, origin=left_origin)
+            self._spawn_enemy_bullet(math.pi, speed, (255, 90, 200), radius=5, origin=right_origin)
+
+    def _start_heavy_survival_pattern(self) -> None:
+        self.heavy_cast_timer = 2.0
+        self.heavy_lasers.clear()
+        self.field_walls.clear()
+        self.enemy_bullets.clear()
+        self.heavy_hit_applied = False
+        self.heavy_reward_dropped = False
+
+        safe_width = 96
+        safe_x = PLAYFIELD.centerx - safe_width // 2
+        self.heavy_safe_zones = [
+            pygame.Rect(safe_x, PLAYFIELD.top + 8, safe_width, PLAYFIELD.height - 16),
+        ]
+        self.heavy_safe_lane = self.heavy_safe_zones[0]
+
+        strip_width = 34
+        left_start = PLAYFIELD.left + 26
+        right_start = PLAYFIELD.right - 26 - strip_width
+        self.heavy_danger_zones = [
+            pygame.Rect(left_start, PLAYFIELD.top + 8, strip_width, PLAYFIELD.height - 16),
+            pygame.Rect(left_start + 88, PLAYFIELD.top + 8, strip_width, PLAYFIELD.height - 16),
+            pygame.Rect(right_start - 88, PLAYFIELD.top + 8, strip_width, PLAYFIELD.height - 16),
+            pygame.Rect(right_start, PLAYFIELD.top + 8, strip_width, PLAYFIELD.height - 16),
+        ]
+        self.phase_banner_text = "HEAVY CAST / SURVIVE"
+        self.phase_banner_timer = 1.2
+
+    def _spawn_heavy_lasers(self) -> None:
+        self.heavy_lasers.clear()
+        if not self.heavy_danger_zones:
+            return
+        for rect in self.heavy_danger_zones:
+            self.heavy_lasers.append(
+                {
+                    "rect": rect.copy(),
+                    "life": 1.3,
+                    "color": (255, 70, 70),
+                    "damage": 30,
+                    "boss_heal": int(self.boss_hp_max * 0.7),
+                }
+            )
+
+    def _drop_shock_bomb_pickup(self) -> None:
+        rect = pygame.Rect(0, 0, 28, 28)
+        rect.center = (
+            int(max(PLAYFIELD.left + 24, min(PLAYFIELD.right - 24, self.player_pos.x))),
+            int(max(PLAYFIELD.top + 24, min(PLAYFIELD.bottom - 24, self.player_pos.y))),
+        )
+        self.pickups.append({"rect": rect, "kind": "bomb", "color": ORANGE})
+
+    def _start_stun_flame_pattern(self) -> None:
+        self.stun_wave_cast_timer = 2.0
+        self.center_flame_cast_timer = 0.0
+        self.center_flames.clear()
+        self.center_flame_hit_applied = False
+        self.heavy_lasers.clear()
+        self.field_walls.clear()
+        self.enemy_bullets.clear()
+
+        side_width = 118
+        self.center_flame_safe_zones = [
+            pygame.Rect(PLAYFIELD.left + 8, PLAYFIELD.top + 8, side_width, PLAYFIELD.height - 16),
+            pygame.Rect(PLAYFIELD.right - side_width - 8, PLAYFIELD.top + 8, side_width, PLAYFIELD.height - 16),
+        ]
+        self.center_flame_danger_zone = pygame.Rect(
+            PLAYFIELD.left + side_width + 22,
+            PLAYFIELD.top + 8,
+            PLAYFIELD.width - (side_width + 22) * 2,
+            PLAYFIELD.height - 16,
+        )
+        self.phase_banner_text = "STUN WAVE / CENTER FLAME"
+        self.phase_banner_timer = 1.2
+
+    def _spawn_center_flame(self) -> None:
+        if self.center_flame_danger_zone.width <= 0:
+            return
+        self.center_flames = [
+            {
+                "rect": self.center_flame_danger_zone.copy(),
+                "life": 1.2,
+                "color": (255, 70, 35),
+                "damage": 35,
+            }
+        ]
 
     def _spawn_grapple_shot(self) -> None:
         base = math.atan2(self.player_pos.y - self.boss_pos.y, self.player_pos.x - self.boss_pos.x)
@@ -366,13 +494,40 @@ class GameScene(Scene):
             self._spawn_enemy_bullet(base + offset, 175 * speed_scale, (160, 220, 255), radius=4)
 
     def _spawn_pattern(self) -> None:
-        pattern = self.phase_index % 6
-        if pattern == 0:
-            self._spawn_aimed_fan()
-        elif pattern == 1:
-            self._spawn_ring()
+        if self.phase_level == 0:
+            pattern_count = 4
+            pattern = self.phase_index % pattern_count
+            if pattern == 0:
+                self._spawn_aimed_fan()
+            elif pattern == 1:
+                self._spawn_ring()
+            elif pattern == 2:
+                self._spawn_stream()
+            else:
+                self._spawn_spray()
+                self._spawn_side_pressure()
+        elif self.phase_level == 1:
+            pattern_count = 5
+            pattern = self.phase_index % pattern_count
+            if pattern == 0:
+                self._spawn_aimed_fan()
+            elif pattern == 1:
+                self._spawn_ring()
+            elif pattern == 2:
+                self._spawn_stream()
+            elif pattern == 3:
+                self._spawn_spray()
+                self._spawn_side_pressure()
+            else:
+                self._start_heavy_survival_pattern()
         else:
-            if pattern == 2:
+            pattern_count = 8
+            pattern = self.phase_index % pattern_count
+            if pattern == 0:
+                self._spawn_aimed_fan()
+            elif pattern == 1:
+                self._spawn_ring()
+            elif pattern == 2:
                 self._spawn_stream()
                 self._spawn_grapple_shot()
             elif pattern == 3:
@@ -381,13 +536,23 @@ class GameScene(Scene):
             elif pattern == 4:
                 self._spawn_cross()
                 self._spawn_stun_field()
-            else:
+            elif pattern == 5:
                 self._spawn_spray()
                 self._spawn_side_pressure()
+            elif pattern == 6:
+                self._start_heavy_survival_pattern()
+            else:
+                self._start_stun_flame_pattern()
         self.attack_index += 1
-        self.phase_index = (self.phase_index + 1) % 6
-        self.phase_banner_text = f"PHASE {self.phase_level + 1} / SYSTEM ESCALATION"
-        self.phase_banner_timer = 1.0
+        self.phase_index = (self.phase_index + 1) % pattern_count
+        special_casting = (
+            self.heavy_cast_timer > 0.0
+            or self.stun_wave_cast_timer > 0.0
+            or self.center_flame_cast_timer > 0.0
+        )
+        if not special_casting:
+            self.phase_banner_text = f"PHASE {self.phase_level + 1} / SYSTEM ESCALATION"
+            self.phase_banner_timer = 1.0
 
     def _update_walls(self, dt_sec: float) -> None:
         new_walls: list[dict] = []
@@ -397,6 +562,26 @@ class GameScene(Scene):
             if wall["life"] > 0:
                 new_walls.append(wall)
         self.field_walls = new_walls
+
+        had_heavy_lasers = bool(self.heavy_lasers)
+        new_lasers: list[dict] = []
+        for laser in self.heavy_lasers:
+            laser["life"] -= dt_sec
+            if laser["life"] > 0:
+                new_lasers.append(laser)
+        self.heavy_lasers = new_lasers
+        if had_heavy_lasers and not self.heavy_lasers and not self.heavy_hit_applied and not self.heavy_reward_dropped:
+            self._drop_shock_bomb_pickup()
+            self.heavy_reward_dropped = True
+            self.phase_banner_text = "DODGE BONUS / SHOCK BOMB"
+            self.phase_banner_timer = 1.0
+
+        new_flames: list[dict] = []
+        for flame in self.center_flames:
+            flame["life"] -= dt_sec
+            if flame["life"] > 0:
+                new_flames.append(flame)
+        self.center_flames = new_flames
 
     def _apply_wall_collisions(self) -> None:
         for wall in self.field_walls:
@@ -442,11 +627,28 @@ class GameScene(Scene):
             color = (120, 120, 150) if size == 1 else (170, 170, 200) if size == 2 else (220, 220, 255)
             pygame.draw.rect(surf, color, (int(x), int(y), size, size))
 
+    def _trigger_boss_kill_cheat(self) -> None:
+        self.boss_hp = 0
+        self.phase_banner_text = "DEBUG / BOSS HP ZERO"
+        self.phase_banner_timer = 0.8
+
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type != pygame.KEYDOWN:
             return
 
         controls = self.controls
+        cheat_keys = (pygame.K_q, pygame.K_w, pygame.K_e, pygame.K_r, pygame.K_t, pygame.K_y)
+
+        if event.key in cheat_keys:
+            expected_key = cheat_keys[len(self.boss_kill_cheat_sequence)]
+            if event.key == expected_key:
+                self.boss_kill_cheat_sequence.append(event.key)
+            else:
+                self.boss_kill_cheat_sequence = [event.key] if event.key == cheat_keys[0] else []
+            self.boss_kill_cheat_timer = 1.4
+            if len(self.boss_kill_cheat_sequence) == len(cheat_keys):
+                self._trigger_boss_kill_cheat()
+                self.boss_kill_cheat_sequence.clear()
 
         if event.key == pygame.K_ESCAPE:
             self.next_scene = SCENE_MAIN
@@ -462,6 +664,10 @@ class GameScene(Scene):
 
         if self.phase_banner_timer > 0.0:
             self.phase_banner_timer = max(0.0, self.phase_banner_timer - dt_sec)
+        if self.boss_kill_cheat_timer > 0.0:
+            self.boss_kill_cheat_timer = max(0.0, self.boss_kill_cheat_timer - dt_sec)
+            if self.boss_kill_cheat_timer == 0.0:
+                self.boss_kill_cheat_sequence.clear()
 
         if self.result is not None:
             return
@@ -472,6 +678,13 @@ class GameScene(Scene):
         self.controls = get_controls(self.shared)
         pressed = pygame.key.get_pressed()
         focus = pressed[pygame.K_LSHIFT] or pressed[pygame.K_RSHIFT]
+        boss_kill_cheat_down = all(
+            pressed[key]
+            for key in (pygame.K_q, pygame.K_w, pygame.K_e, pygame.K_r, pygame.K_t, pygame.K_y)
+        )
+        if boss_kill_cheat_down and not self.boss_kill_cheat_down:
+            self._trigger_boss_kill_cheat()
+        self.boss_kill_cheat_down = boss_kill_cheat_down
 
         move_x = 0.0
         move_y = 0.0
@@ -513,7 +726,33 @@ class GameScene(Scene):
                 self.pending_pattern()
                 self.pending_pattern = None
 
-        if self.boot_timer <= 0.0:
+        if self.heavy_cast_timer > 0.0:
+            self.heavy_cast_timer = max(0.0, self.heavy_cast_timer - dt_sec)
+            if self.heavy_cast_timer == 0.0:
+                self._spawn_heavy_lasers()
+
+        if self.stun_wave_cast_timer > 0.0:
+            self.stun_wave_cast_timer = max(0.0, self.stun_wave_cast_timer - dt_sec)
+            if self.stun_wave_cast_timer == 0.0:
+                self.stun_timer = max(self.stun_timer, 1.25)
+                self.control_lock = max(self.control_lock, 1.25)
+                self.center_flame_cast_timer = 0.65
+                self.phase_banner_text = "CENTER FLAME / SIDE SAFE"
+                self.phase_banner_timer = 1.0
+
+        if self.center_flame_cast_timer > 0.0:
+            self.center_flame_cast_timer = max(0.0, self.center_flame_cast_timer - dt_sec)
+            if self.center_flame_cast_timer == 0.0:
+                self._spawn_center_flame()
+
+        heavy_active = self.heavy_cast_timer > 0.0 or bool(self.heavy_lasers)
+        stun_flame_active = (
+            self.stun_wave_cast_timer > 0.0
+            or self.center_flame_cast_timer > 0.0
+            or bool(self.center_flames)
+        )
+        special_active = heavy_active or stun_flame_active
+        if self.boot_timer <= 0.0 and not special_active:
             self.enemy_timer += dt_sec
             if self.enemy_timer >= 1.15:
                 self.enemy_timer = 0.0
@@ -536,7 +775,7 @@ class GameScene(Scene):
             bullet for bullet in self.enemy_bullets if PLAYFIELD.collidepoint(int(bullet["pos"].x), int(bullet["pos"].y))
         ]
 
-        if self.grapple_hit_flash > 0.0:
+        if self.grapple_hit_flash > 0.0 and not special_active:
             self.grapple_hit_flash = max(0.0, self.grapple_hit_flash - dt_sec)
             if self.grapple_hit_flash > 0.0 and random.random() < 0.08:
                 self.enemy_bullets.append(
@@ -544,7 +783,7 @@ class GameScene(Scene):
                         "pos": pygame.Vector2(self.player_pos.x, self.player_pos.y),
                         "vel": pygame.Vector2(random.uniform(-40, 40), random.uniform(-40, 40)),
                         "radius": 2,
-                        "color": YELLOW,
+                        "color": (255, 70, 70),
                     }
                 )
 
@@ -565,7 +804,7 @@ class GameScene(Scene):
             hit_radius = 4 if focus else self.player_hit_radius
             for bullet in self.enemy_bullets:
                 if player_hit.distance_to(bullet["pos"]) <= hit_radius + bullet["radius"]:
-                    self.player_hp -= 1
+                    self.player_hp -= bullet.get("damage", 5)
                     self.player_invuln = 1.2
                     bullet["pos"].x = -9999
                     break
@@ -573,9 +812,26 @@ class GameScene(Scene):
         if self.phase_level % 2 == 1 and self.player_invuln <= 0.0:
             for wall in self.field_walls:
                 if wall["rect"].collidepoint(player_hit.x, player_hit.y):
-                    self.player_hp -= 1
+                    self.player_hp -= 5
                     self.player_invuln = 1.0
                     self.knockback_velocity = pygame.Vector2(220 if wall["vx"] < 0 else -220, 0)
+                    break
+
+        if self.player_invuln <= 0.0 and not self.heavy_hit_applied:
+            for laser in self.heavy_lasers:
+                if laser["rect"].collidepoint(player_hit.x, player_hit.y):
+                    self.player_hp -= laser.get("damage", self.player_hp_max // 2)
+                    self.boss_hp = min(self.boss_hp_max, self.boss_hp + laser.get("boss_heal", int(self.boss_hp_max * 0.7)))
+                    self.heavy_hit_applied = True
+                    self.player_invuln = 1.2
+                    break
+
+        if self.player_invuln <= 0.0 and not self.center_flame_hit_applied:
+            for flame in self.center_flames:
+                if flame["rect"].collidepoint(player_hit.x, player_hit.y):
+                    self.player_hp -= flame.get("damage", 35)
+                    self.center_flame_hit_applied = True
+                    self.player_invuln = 1.2
                     break
 
         new_player_bullets: list[dict] = []
@@ -600,6 +856,68 @@ class GameScene(Scene):
         for wall in self.field_walls:
             pygame.draw.rect(surf, wall["color"], wall["rect"])
             draw_box(surf, wall["rect"], WHITE, 2)
+
+        if self.stun_wave_cast_timer > 0.0:
+            stun_overlay = pygame.Surface((PLAYFIELD.width, PLAYFIELD.height), pygame.SRCALPHA)
+            stun_overlay.fill((70, 125, 255, 95))
+            surf.blit(stun_overlay, PLAYFIELD.topleft)
+            draw_box(surf, PLAYFIELD.inflate(-12, -12), CYAN, 3)
+            cast_text = self.fonts["small"].render("STUN WAVE 2.0s - NO DAMAGE", False, WHITE)
+            surf.blit(cast_text, (PLAYFIELD.left + 14, PLAYFIELD.top + 10))
+
+        if self.center_flame_cast_timer > 0.0:
+            cast_overlay = pygame.Surface((PLAYFIELD.width, PLAYFIELD.height), pygame.SRCALPHA)
+            cast_overlay.fill((20, 20, 28, 40))
+            surf.blit(cast_overlay, PLAYFIELD.topleft)
+            if self.center_flame_danger_zone.width > 0:
+                danger_overlay = pygame.Surface(
+                    (self.center_flame_danger_zone.width, self.center_flame_danger_zone.height),
+                    pygame.SRCALPHA,
+                )
+                danger_overlay.fill((255, 40, 40, 105))
+                surf.blit(danger_overlay, self.center_flame_danger_zone.topleft)
+                draw_box(surf, self.center_flame_danger_zone, RED, 2)
+            for safe_zone in self.center_flame_safe_zones:
+                safe_overlay = pygame.Surface((safe_zone.width, safe_zone.height), pygame.SRCALPHA)
+                safe_overlay.fill((70, 125, 255, 125))
+                surf.blit(safe_overlay, safe_zone.topleft)
+                draw_box(surf, safe_zone, CYAN, 2)
+            cast_text = self.fonts["small"].render("CENTER FLAME - BLUE SIDES SAFE", False, WHITE)
+            surf.blit(cast_text, (PLAYFIELD.left + 14, PLAYFIELD.top + 10))
+
+        if self.heavy_cast_timer > 0.0:
+            cast_overlay = pygame.Surface((PLAYFIELD.width, PLAYFIELD.height), pygame.SRCALPHA)
+            cast_overlay.fill((20, 20, 28, 40))
+            surf.blit(cast_overlay, PLAYFIELD.topleft)
+            cast_progress = 1.0 - self.heavy_cast_timer / 2.0
+            pressure_width = int(34 + cast_progress * 82)
+            left_pressure = pygame.Rect(PLAYFIELD.left + 8, PLAYFIELD.top + 8, pressure_width, PLAYFIELD.height - 16)
+            right_pressure = pygame.Rect(PLAYFIELD.right - 8 - pressure_width, PLAYFIELD.top + 8, pressure_width, PLAYFIELD.height - 16)
+            for pressure_zone in (left_pressure, right_pressure):
+                pressure_overlay = pygame.Surface((pressure_zone.width, pressure_zone.height), pygame.SRCALPHA)
+                pressure_overlay.fill((255, 35, 35, 55))
+                surf.blit(pressure_overlay, pressure_zone.topleft)
+                draw_box(surf, pressure_zone, RED, 1)
+            for danger_zone in self.heavy_danger_zones:
+                danger_overlay = pygame.Surface((danger_zone.width, danger_zone.height), pygame.SRCALPHA)
+                danger_overlay.fill((255, 40, 40, 95))
+                surf.blit(danger_overlay, danger_zone.topleft)
+                draw_box(surf, danger_zone, RED, 2)
+            for safe_zone in self.heavy_safe_zones:
+                safe_overlay = pygame.Surface((safe_zone.width, safe_zone.height), pygame.SRCALPHA)
+                safe_overlay.fill((70, 125, 255, 125))
+                surf.blit(safe_overlay, safe_zone.topleft)
+                draw_box(surf, safe_zone, CYAN, 2)
+            cast_text = self.fonts["small"].render("HEAVY CAST 2.0s - BLUE SAFE ZONES", False, WHITE)
+            surf.blit(cast_text, (PLAYFIELD.left + 14, PLAYFIELD.top + 10))
+
+        for laser in self.heavy_lasers:
+            pygame.draw.rect(surf, laser["color"], laser["rect"])
+            draw_box(surf, laser["rect"], WHITE, 2)
+
+        for flame in self.center_flames:
+            pygame.draw.rect(surf, flame["color"], flame["rect"])
+            draw_box(surf, flame["rect"], WHITE, 2)
 
         if self.grapple_origin is not None and self.grapple_timer > 0.0:
             start = (int(self.grapple_origin.x), int(self.grapple_origin.y))
@@ -684,21 +1002,13 @@ class GameScene(Scene):
         hp_label = self.fonts["small"].render("코어 안정도", False, YELLOW)
         surf.blit(hp_label, (ui_box.x + 10, ui_box.y + 10))
 
-        hp_bar = pygame.Rect(ui_box.x + 90, ui_box.y + 12, 110, 14)
+        hp_bar = pygame.Rect(ui_box.x + 90, ui_box.y + 12, 150, 14)
         pygame.draw.rect(surf, DGRAY, hp_bar)
         draw_box(surf, hp_bar, WHITE, 1)
-        segment_gap = 2
-        segment_width = (hp_bar.width - segment_gap * 5) // 6
-        for index in range(6):
-            segment = pygame.Rect(
-                hp_bar.x + index * (segment_width + segment_gap),
-                hp_bar.y,
-                segment_width,
-                hp_bar.height,
-            )
-            filled = index < self.player_hp
-            pygame.draw.rect(surf, RED if filled else (50, 50, 58), segment)
-            pygame.draw.rect(surf, WHITE if filled else DGRAY, segment, 1)
+        hp_ratio = max(0.0, min(1.0, self.player_hp / max(1, self.player_hp_max)))
+        pygame.draw.rect(surf, RED, (hp_bar.x, hp_bar.y, int(hp_bar.width * hp_ratio), hp_bar.height))
+        hp_text = self.fonts["small"].render(f"{max(0, int(self.player_hp))} / {self.player_hp_max}", False, WHITE)
+        surf.blit(hp_text, (hp_bar.right + 8, ui_box.y + 10))
 
         controls_text = self.fonts["small"].render("X:다음 아이템  Z:사용  SHIFT:포커스", False, GRAY)
         surf.blit(controls_text, (ui_box.right - controls_text.get_width() - 10, ui_box.y + 10))
