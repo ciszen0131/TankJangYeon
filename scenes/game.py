@@ -17,6 +17,8 @@ from core.constants import (
     ORANGE,
     WIDTH,
     HEIGHT,
+    INTRO_LINES,
+    INTRO_DURATION,
 )
 from ui.draw import draw_box, draw_text_outline
 
@@ -51,7 +53,7 @@ class GameScene(Scene):
     def __init__(self, screen, fonts, shared):
         super().__init__(screen, fonts, shared)
         self.controls = get_controls(shared)
-        self.boot_timer = 2.0
+        self.boot_timer = INTRO_DURATION
 
         self.player_pos = pygame.Vector2(PLAYFIELD.centerx, PLAYFIELD.bottom - 56)
         self.player_speed = 280.0
@@ -1150,15 +1152,19 @@ class GameScene(Scene):
         overlay.fill((0, 0, 0, 200))
         surf.blit(overlay, (0, 0))
 
-        box = pygame.Rect(150, 220, 500, 118)
+        # 상수 리스트(INTRO_LINES)의 내용 수에 맞춰 박스 높이 계산
+        box_h = 60 + len(INTRO_LINES) * 24
+        box = pygame.Rect(WIDTH // 2 - 250, HEIGHT // 2 - box_h // 2, 500, box_h)
         pygame.draw.rect(surf, BLACK, box)
         draw_box(surf, box, CYAN, 3)
-        title = self.fonts["title"].render("SYSTEM BOOT", False, CYAN)
+        
+        title = self.fonts["title"].render("OPERATION START", False, CYAN)
         surf.blit(title, (box.centerx - title.get_width() // 2, box.y + 18))
-        sub = self.fonts["small"].render("PROTO-0 CONNECTED  //  ZERO HOSTILE SIGNAL DETECTED", False, GRAY)
-        surf.blit(sub, (box.centerx - sub.get_width() // 2, box.y + 66))
-        tip = self.fonts["small"].render("INSERT COIN... 아니고, 살아남아라.", False, YELLOW)
-        surf.blit(tip, (box.centerx - tip.get_width() // 2, box.y + 88))
+        
+        # 인트로 텍스트 그리기
+        for i, line in enumerate(INTRO_LINES):
+            text_surf = self.fonts["small"].render(line, False, GRAY)
+            surf.blit(text_surf, (box.centerx - text_surf.get_width() // 2, box.y + 60 + i * 24))
 
     def _draw_center_banner(self, surf: pygame.Surface, text: str, color) -> None:
         box = pygame.Rect(200, 260, 400, 76)

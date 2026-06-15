@@ -57,16 +57,20 @@ class MainMenuScene(Scene):
         ]
         for i, text in enumerate(logs):
             if (self.boot_scroll + i * 24) % 48 < 24:
-                surf.blit(log_font.render(text, False, CYAN), (40, 36 + i * 18))
+                # 원래 36이었으나 title_bar와 겹치지 않게 y위치를 170으로 아래로 내림
+                surf.blit(log_font.render(text, False, CYAN), (40, 170 + i * 18))
 
-        menu_box = pygame.Rect(220, 170, 360, 228)
+        # 메뉴 박스 또한 기존 170에서 260으로 화면 중앙 부근이 되게 내림
+        # 화면 비율(중앙 정렬) 고려
+        box_w, box_h = 360, 228
+        menu_box = pygame.Rect(WIDTH // 2 - box_w // 2, 260, box_w, box_h)
         pygame.draw.rect(surf, BLACK, menu_box)
         draw_box(surf, menu_box, CYAN, 3)
 
         title = self.fonts["title"].render("SYSTEM BOOT", False, CYAN)
-        surf.blit(title, (WIDTH // 2 - title.get_width() // 2, 118))
-        sub = self.fonts["small"].render("PROTO-0 / TANK FRONT", False, GRAY)
-        surf.blit(sub, (WIDTH // 2 - sub.get_width() // 2, 154))
+        surf.blit(title, (WIDTH // 2 - title.get_width() // 2, 210))
+        sub = self.fonts["small"].render("PROTO-0 / FRONTLINE", False, GRAY)
+        surf.blit(sub, (WIDTH // 2 - sub.get_width() // 2, 246))
 
         for i, item in enumerate(ITEMS):
             iy     = menu_box.y + 22 + i * 48
@@ -82,10 +86,10 @@ class MainMenuScene(Scene):
             draw_text_outline(surf, item, self.fonts["sub"],
                               menu_box.x + 50, iy, color=color)
 
-        # 하단 조작 힌트
+        # 하단 조작 힌트 (겹침 방지로 위치를 더 아래로: 520)
         if self.blink % 60 < 40:
             hint = self.fonts["small"].render("↑↓ 이동   Z/ENTER 선택", False, GRAY)
-            surf.blit(hint, (WIDTH // 2 - hint.get_width() // 2, 415))
+            surf.blit(hint, (WIDTH // 2 - hint.get_width() // 2, 520))
 
         # 버전
         ver = self.fonts["small"].render("v0.1.0  PROTOTYPE", False, GRAY)
