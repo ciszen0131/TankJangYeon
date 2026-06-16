@@ -92,6 +92,11 @@ class GameScene(Scene):
         self.heavy_danger_zones: list[pygame.Rect] = []
         self.heavy_hit_applied = False
         self.heavy_reward_dropped = False
+        self.side_laser_cast_timer = 0.0
+        self.side_laser_safe_zone = pygame.Rect(0, 0, 0, 0)
+        self.side_laser_danger_zones: list[pygame.Rect] = []
+        self.side_lasers: list[dict] = []
+        self.side_laser_hit_applied = False
         self.stun_wave_cast_timer = 0.0
         self.center_flame_cast_timer = 0.0
         self.center_flame_safe_zones: list[pygame.Rect] = []
@@ -166,6 +171,7 @@ class GameScene(Scene):
             self.enemy_bullets.clear()
             self.field_walls.clear()
             self.heavy_lasers.clear()
+            self.side_lasers.clear()
             self.center_flames.clear()
             self.grapple_lines.clear()
             self.boss_hp = max(0, self.boss_hp - 10)
@@ -226,6 +232,11 @@ class GameScene(Scene):
         self.heavy_danger_zones.clear()
         self.heavy_hit_applied = False
         self.heavy_reward_dropped = False
+        self.side_laser_cast_timer = 0.0
+        self.side_laser_safe_zone = pygame.Rect(0, 0, 0, 0)
+        self.side_laser_danger_zones: list[pygame.Rect] = []
+        self.side_lasers: list[dict] = []
+        self.side_laser_hit_applied = False
         self.stun_wave_cast_timer = 0.0
         self.center_flame_cast_timer = 0.0
         self.center_flame_safe_zones.clear()
@@ -412,21 +423,19 @@ class GameScene(Scene):
         self.heavy_hit_applied = False
         self.heavy_reward_dropped = False
 
-        safe_width = 96
-        safe_x = PLAYFIELD.centerx - safe_width // 2
+        side_safe_width = 118
+        bottom_safe_height = 74
         self.heavy_safe_zones = [
-            pygame.Rect(safe_x, PLAYFIELD.top + 8, safe_width, PLAYFIELD.height - 16),
+            pygame.Rect(PLAYFIELD.left + 8, PLAYFIELD.top + 8, side_safe_width, PLAYFIELD.height - 16),
+            pygame.Rect(PLAYFIELD.right - side_safe_width - 8, PLAYFIELD.top + 8, side_safe_width, PLAYFIELD.height - 16),
+            pygame.Rect(PLAYFIELD.left + 8, PLAYFIELD.bottom - bottom_safe_height - 8, PLAYFIELD.width - 16, bottom_safe_height),
         ]
         self.heavy_safe_lane = self.heavy_safe_zones[0]
 
-        strip_width = 34
-        left_start = PLAYFIELD.left + 26
-        right_start = PLAYFIELD.right - 26 - strip_width
+        center_x = PLAYFIELD.left + side_safe_width + 20
+        center_width = PLAYFIELD.width - (side_safe_width + 20) * 2
         self.heavy_danger_zones = [
-            pygame.Rect(left_start, PLAYFIELD.top + 8, strip_width, PLAYFIELD.height - 16),
-            pygame.Rect(left_start + 88, PLAYFIELD.top + 8, strip_width, PLAYFIELD.height - 16),
-            pygame.Rect(right_start - 88, PLAYFIELD.top + 8, strip_width, PLAYFIELD.height - 16),
-            pygame.Rect(right_start, PLAYFIELD.top + 8, strip_width, PLAYFIELD.height - 16),
+            pygame.Rect(center_x, PLAYFIELD.top + 8, center_width, PLAYFIELD.height - bottom_safe_height - 20),
         ]
         self.phase_banner_text = "HEAVY CAST / SURVIVE"
         self.phase_banner_timer = 1.2
@@ -441,7 +450,7 @@ class GameScene(Scene):
                     "rect": rect.copy(),
                     "life": 1.3,
                     "color": (255, 70, 70),
-                    "damage": 30,
+                    "damage": 50,
                     "boss_heal": int(self.boss_hp_max * 0.7),
                 }
             )
@@ -453,6 +462,37 @@ class GameScene(Scene):
             int(max(PLAYFIELD.top + 24, min(PLAYFIELD.bottom - 24, self.player_pos.y))),
         )
         self.pickups.append({"rect": rect, "kind": "bomb", "color": ORANGE})
+
+    def _start_side_laser_pattern(self) -> None:
+        self.side_laser_cast_timer = 2.0
+        self.side_lasers.clear()
+        self.side_laser_hit_applied = False
+        self.heavy_lasers.clear()
+        self.center_flames.clear()
+        self.field_walls.clear()
+        self.enemy_bullets.clear()
+
+        safe_width = 112
+        safe_x = PLAYFIELD.centerx - safe_width // 2
+        self.side_laser_safe_zone = pygame.Rect(safe_x, PLAYFIELD.top + 8, safe_width, PLAYFIELD.height - 16)
+        self.side_laser_danger_zones = [
+            pygame.Rect(PLAYFIELD.left + 8, PLAYFIELD.top + 8, safe_x - PLAYFIELD.left - 12, PLAYFIELD.height - 16),
+            pygame.Rect(safe_x + safe_width + 4, PLAYFIELD.top + 8, PLAYFIELD.right - safe_x - safe_width - 12, PLAYFIELD.height - 16),
+        ]
+        self.phase_banner_text = "SIDE LASER / CENTER SAFE"
+        self.phase_banner_timer = 1.2
+
+    def _spawn_side_lasers(self) -> None:
+        self.side_lasers.clear()
+        for rect in self.side_laser_danger_zones:
+            self.side_lasers.append(
+                {
+                    "rect": rect.copy(),
+                    "life": 1.25,
+                    "color": (255, 70, 70),
+                    "damage": 30,
+                }
+            )
 
     def _start_stun_flame_pattern(self) -> None:
         self.stun_wave_cast_timer = 2.0
@@ -497,18 +537,6 @@ class GameScene(Scene):
 
     def _spawn_pattern(self) -> None:
         if self.phase_level == 0:
-            pattern_count = 4
-            pattern = self.phase_index % pattern_count
-            if pattern == 0:
-                self._spawn_aimed_fan()
-            elif pattern == 1:
-                self._spawn_ring()
-            elif pattern == 2:
-                self._spawn_stream()
-            else:
-                self._spawn_spray()
-                self._spawn_side_pressure()
-        elif self.phase_level == 1:
             pattern_count = 5
             pattern = self.phase_index % pattern_count
             if pattern == 0:
@@ -519,11 +547,25 @@ class GameScene(Scene):
                 self._spawn_stream()
             elif pattern == 3:
                 self._spawn_spray()
+            else:
+                self._spawn_side_pressure()
+        elif self.phase_level == 1:
+            pattern_count = 6
+            pattern = self.phase_index % pattern_count
+            if pattern == 0:
+                self._spawn_aimed_fan()
+            elif pattern == 1:
+                self._spawn_ring()
+            elif pattern == 2:
+                self._spawn_stream()
+            elif pattern == 3:
+                self._spawn_spray()
+            elif pattern == 4:
                 self._spawn_side_pressure()
             else:
                 self._start_heavy_survival_pattern()
         else:
-            pattern_count = 8
+            pattern_count = 10
             pattern = self.phase_index % pattern_count
             if pattern == 0:
                 self._spawn_aimed_fan()
@@ -540,15 +582,19 @@ class GameScene(Scene):
                 self._spawn_stun_field()
             elif pattern == 5:
                 self._spawn_spray()
-                self._spawn_side_pressure()
             elif pattern == 6:
+                self._spawn_side_pressure()
+            elif pattern == 7:
                 self._start_heavy_survival_pattern()
+            elif pattern == 8:
+                self._start_side_laser_pattern()
             else:
                 self._start_stun_flame_pattern()
         self.attack_index += 1
         self.phase_index = (self.phase_index + 1) % pattern_count
         special_casting = (
             self.heavy_cast_timer > 0.0
+            or self.side_laser_cast_timer > 0.0
             or self.stun_wave_cast_timer > 0.0
             or self.center_flame_cast_timer > 0.0
         )
@@ -584,6 +630,13 @@ class GameScene(Scene):
             if flame["life"] > 0:
                 new_flames.append(flame)
         self.center_flames = new_flames
+
+        new_side_lasers: list[dict] = []
+        for laser in self.side_lasers:
+            laser["life"] -= dt_sec
+            if laser["life"] > 0:
+                new_side_lasers.append(laser)
+        self.side_lasers = new_side_lasers
 
     def _apply_wall_collisions(self) -> None:
         for wall in self.field_walls:
@@ -733,6 +786,11 @@ class GameScene(Scene):
             if self.heavy_cast_timer == 0.0:
                 self._spawn_heavy_lasers()
 
+        if self.side_laser_cast_timer > 0.0:
+            self.side_laser_cast_timer = max(0.0, self.side_laser_cast_timer - dt_sec)
+            if self.side_laser_cast_timer == 0.0:
+                self._spawn_side_lasers()
+
         if self.stun_wave_cast_timer > 0.0:
             self.stun_wave_cast_timer = max(0.0, self.stun_wave_cast_timer - dt_sec)
             if self.stun_wave_cast_timer == 0.0:
@@ -748,12 +806,13 @@ class GameScene(Scene):
                 self._spawn_center_flame()
 
         heavy_active = self.heavy_cast_timer > 0.0 or bool(self.heavy_lasers)
+        side_laser_active = self.side_laser_cast_timer > 0.0 or bool(self.side_lasers)
         stun_flame_active = (
             self.stun_wave_cast_timer > 0.0
             or self.center_flame_cast_timer > 0.0
             or bool(self.center_flames)
         )
-        special_active = heavy_active or stun_flame_active
+        special_active = heavy_active or side_laser_active or stun_flame_active
         if self.boot_timer <= 0.0 and not special_active:
             self.enemy_timer += dt_sec
             if self.enemy_timer >= 1.15:
@@ -828,6 +887,14 @@ class GameScene(Scene):
                     self.player_invuln = 1.2
                     break
 
+        if self.player_invuln <= 0.0 and not self.side_laser_hit_applied:
+            for laser in self.side_lasers:
+                if laser["rect"].collidepoint(player_hit.x, player_hit.y):
+                    self.player_hp -= laser.get("damage", 30)
+                    self.side_laser_hit_applied = True
+                    self.player_invuln = 1.2
+                    break
+
         if self.player_invuln <= 0.0 and not self.center_flame_hit_applied:
             for flame in self.center_flames:
                 if flame["rect"].collidepoint(player_hit.x, player_hit.y):
@@ -858,6 +925,23 @@ class GameScene(Scene):
         for wall in self.field_walls:
             pygame.draw.rect(surf, wall["color"], wall["rect"])
             draw_box(surf, wall["rect"], WHITE, 2)
+
+        if self.side_laser_cast_timer > 0.0:
+            cast_overlay = pygame.Surface((PLAYFIELD.width, PLAYFIELD.height), pygame.SRCALPHA)
+            cast_overlay.fill((20, 20, 28, 40))
+            surf.blit(cast_overlay, PLAYFIELD.topleft)
+            for danger_zone in self.side_laser_danger_zones:
+                danger_overlay = pygame.Surface((danger_zone.width, danger_zone.height), pygame.SRCALPHA)
+                danger_overlay.fill((255, 40, 40, 95))
+                surf.blit(danger_overlay, danger_zone.topleft)
+                draw_box(surf, danger_zone, RED, 2)
+            if self.side_laser_safe_zone.width > 0:
+                safe_overlay = pygame.Surface((self.side_laser_safe_zone.width, self.side_laser_safe_zone.height), pygame.SRCALPHA)
+                safe_overlay.fill((70, 125, 255, 125))
+                surf.blit(safe_overlay, self.side_laser_safe_zone.topleft)
+                draw_box(surf, self.side_laser_safe_zone, CYAN, 2)
+            cast_text = self.fonts["small"].render("SIDE LASER 2.0s - CENTER SAFE", False, WHITE)
+            surf.blit(cast_text, (PLAYFIELD.left + 14, PLAYFIELD.top + 10))
 
         if self.stun_wave_cast_timer > 0.0:
             stun_overlay = pygame.Surface((PLAYFIELD.width, PLAYFIELD.height), pygame.SRCALPHA)
@@ -891,15 +975,6 @@ class GameScene(Scene):
             cast_overlay = pygame.Surface((PLAYFIELD.width, PLAYFIELD.height), pygame.SRCALPHA)
             cast_overlay.fill((20, 20, 28, 40))
             surf.blit(cast_overlay, PLAYFIELD.topleft)
-            cast_progress = 1.0 - self.heavy_cast_timer / 2.0
-            pressure_width = int(34 + cast_progress * 82)
-            left_pressure = pygame.Rect(PLAYFIELD.left + 8, PLAYFIELD.top + 8, pressure_width, PLAYFIELD.height - 16)
-            right_pressure = pygame.Rect(PLAYFIELD.right - 8 - pressure_width, PLAYFIELD.top + 8, pressure_width, PLAYFIELD.height - 16)
-            for pressure_zone in (left_pressure, right_pressure):
-                pressure_overlay = pygame.Surface((pressure_zone.width, pressure_zone.height), pygame.SRCALPHA)
-                pressure_overlay.fill((255, 35, 35, 55))
-                surf.blit(pressure_overlay, pressure_zone.topleft)
-                draw_box(surf, pressure_zone, RED, 1)
             for danger_zone in self.heavy_danger_zones:
                 danger_overlay = pygame.Surface((danger_zone.width, danger_zone.height), pygame.SRCALPHA)
                 danger_overlay.fill((255, 40, 40, 95))
@@ -914,6 +989,10 @@ class GameScene(Scene):
             surf.blit(cast_text, (PLAYFIELD.left + 14, PLAYFIELD.top + 10))
 
         for laser in self.heavy_lasers:
+            pygame.draw.rect(surf, laser["color"], laser["rect"])
+            draw_box(surf, laser["rect"], WHITE, 2)
+
+        for laser in self.side_lasers:
             pygame.draw.rect(surf, laser["color"], laser["rect"])
             draw_box(surf, laser["rect"], WHITE, 2)
 
