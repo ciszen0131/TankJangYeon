@@ -11,7 +11,7 @@ from scenes.settings  import SettingsScene
 from scenes.story     import StoryScene
 from scenes.game      import GameScene
 
-# ── pygame 초기화 ────────────────────────────────────────────
+# ── pygame 초기화 ────────────────────────────────
 pygame.init()
 pygame.mixer.init()
 
@@ -22,25 +22,39 @@ clock = pygame.time.Clock()
 fonts   = init_fonts()
 shared  = {}   # 씬 간 공유 상태 (볼륨 등)
 
-# ── BGM 재생 함수 ────────────────────────────────────────────
+# ── BGM 재생 함수 ───────────────────────────────
 from core.constants import BGM_VOLUME
 
 def play_bgm(filepath: str):
     import os
-    if not os.path.exists(filepath):
-        print(f"[알림] BGM 파일이 없습니다: {filepath}")
-        return
-    try:
-        pygame.mixer.music.load(filepath)
-        pygame.mixer.music.set_volume(BGM_VOLUME)
-        pygame.mixer.music.play(-1)
-    except Exception as e:
-        print(f"[경고] BGM 재생 실패 ({filepath}): {e}")
+
+    base, _ = os.path.splitext(filepath)
+    candidates = list(dict.fromkeys(
+        [filepath] + [base + ext for ext in (".ogg", ".mp3", ".wav", ".flac")]
+    ))
+
+    for path in candidates:
+        if not os.path.exists(path):
+            continue
+        # 실제 오디오는 보통 1KB 이상 - 더미/플레이스홀더 파일 거르기
+        if os.path.getsize(path) < 1024:
+            print(f"[알림] BGM 이 플레이스홀더(더미) 파일이라 건너뜁니다: {path}")
+            continue
+        try:
+            pygame.mixer.music.load(path)
+            pygame.mixer.music.set_volume(BGM_VOLUME)
+            pygame.mixer.music.play(-1)
+            return
+        except Exception as e:
+            print(f"[경고] BGM 재생 실패 ({path}): {e}")
+
+    print(f"[알림] 재생할 수 있는 BGM 이 없습니다: {filepath}")
+    print("        assets/audio/ 에 실제 .ogg/.mp3/.wav 음원을 넣어주세요.")
 
 # 시작 BGM
 play_bgm("assets/audio/bgm_menu.ogg")
 
-# ── 씬 레지스트리 ────────────────────────────────────────────
+# ── 씬 레지스트리 ────────────────────────────────
 def build_scenes():
     return {
         SCENE_MAIN:     MainMenuScene(screen, fonts, shared),
@@ -52,11 +66,11 @@ def build_scenes():
 scenes      = build_scenes()
 current_key = SCENE_MAIN
 
-# ── 배경 오브젝트 ─────────────────────────────────────────────
+# ── 배경 오브젝트 ───────────────────────────────
 particles    = ParticleSystem(count=80)
 scanline_surf = make_scanline_surf()
 
-# ── 메인 루프 ────────────────────────────────────────────────
+# ── 메인 루프 ──────────────────────────────────
 running = True
 while running:
     dt = clock.tick(60)
@@ -93,15 +107,15 @@ while running:
     # 업데이트
     scene.update(dt)
 
-    # ── 공통 배경 그리기 ──────────────────────────────────────
+    # ── 공통 배경 그리기 ─────────────────────────
     draw_background(screen, scanline_surf)
     particles.update_and_draw(screen)
     draw_title_bar(screen, fonts)
 
-    # ── 씬 고유 UI 그리기 ─────────────────────────────────────
+    # ── 씬 고유 UI 그리기 ─────────────────────────
     scene.draw(screen)
 
-    # ── 공통 오버레이 ─────────────────────────────────────────
+    # ── 공통 오버레이 ─────────────────────────────
     draw_corners(screen)
 
     pygame.display.flip()

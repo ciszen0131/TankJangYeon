@@ -1036,14 +1036,14 @@ class GameScene(Scene):
         
         centerx, centery = self.boss_rect.centerx, self.boss_rect.centery
 
-        # 후면 케이블 실루엣 (작살 케이블 잔해)
+        # 후면 케이블 실루엓 (작살 케이블 잔해)
         for idx in range(3):
             angle = self.boss_move_timer * 2 + idx * (math.pi * 0.6)
             offset_x = math.cos(angle) * 35
             offset_y = math.sin(angle) * 20
             pygame.draw.line(surf, (30, 30, 30), (centerx, centery), (centerx + offset_x, centery - 20 + offset_y), 4)
 
-        # 1. 메인 섀시 (조금 더 각진 다각형 구조)
+        # 1. 메인 섬시 (조금 더 각진 다각형 구조)
         main_poly = [
             (centerx - 30, centery - 35),
             (centerx + 30, centery - 35),
@@ -1099,7 +1099,7 @@ class GameScene(Scene):
 
     def _draw_player(self, surf: pygame.Surface) -> None:
         invuln_flash = self.player_invuln > 0 and (self.blink // 4) % 2 == 0
-        suit_base = (200, 220, 255) if invuln_flash else (130, 95, 45)  # 낡고 큰 정비복
+        suit_base = (200, 220, 255) if invuln_flash else (130, 95, 45)  # 낙고 큰 정비복
         suit_shadow = (100, 70, 30)
         armor_color = (255, 255, 255) if invuln_flash else (85, 95, 105) # 장갑
         glow_color = (255, 255, 255) if invuln_flash else PLAYER_COLORS["glow"]
@@ -1115,7 +1115,7 @@ class GameScene(Scene):
         pygame.draw.rect(surf, suit_shadow, (suit_rect.x, suit_rect.y + 4, suit_rect.width, suit_rect.height), border_radius=8)
         pygame.draw.rect(surf, suit_base, suit_rect, border_radius=8)
 
-        # 2. 미완성 수호 슈트 흉갑 (Chest Armor)
+        # 2. 미완성 수호 슐트 흉갑 (Chest Armor)
         chest_points = [
             (centerx - 14, centery - 8),
             (centerx + 14, centery - 8),
@@ -1129,7 +1129,7 @@ class GameScene(Scene):
         pygame.draw.circle(surf, glow_color, (centerx, centery - 2), 5)
         pygame.draw.circle(surf, WHITE, (centerx, centery - 2), 2) # 코어 하이라이트
 
-        # 3. 반쯤 깨진 헬멧
+        # 3. 반쯤 깨진 헬멓
         helmet_rect = pygame.Rect(0, 0, 28, 26)
         helmet_rect.midbottom = (centerx, centery - 6)
         pygame.draw.rect(surf, (40, 40, 45), helmet_rect, border_radius=10)
@@ -1223,15 +1223,15 @@ class GameScene(Scene):
             surf.blit(hint, (PLAYFIELD.right - hint.get_width() - 8, PLAYFIELD.bottom + 8))
 
         if self.phase_banner_timer > 0.0:
-            banner = self.fonts["small"].render(self.phase_banner_text, False, CYAN)
-            surf.blit(banner, (WIDTH // 2 - banner.get_width() // 2, PLAYFIELD.top - 24))
+            banner = self.fonts["sub"].render(self.phase_banner_text, False, YELLOW)
+            surf.blit(banner, (WIDTH // 2 - banner.get_width() // 2, 95))
 
     def _draw_boot_overlay(self, surf: pygame.Surface) -> None:
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         surf.blit(overlay, (0, 0))
 
-        # 상수 리스트(INTRO_LINES)의 내용 수에 맞춰 박스 높이 계산
+        # 상수 리스트(INTRO_LINES)의 내용 수에 맞쬰 박스 높이 계산
         box_h = 60 + len(INTRO_LINES) * 24
         box = pygame.Rect(WIDTH // 2 - 250, HEIGHT // 2 - box_h // 2, 500, box_h)
         pygame.draw.rect(surf, BLACK, box)

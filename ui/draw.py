@@ -59,7 +59,6 @@ def draw_title_bar(surf: pygame.Surface, fonts: dict,
         pygame.draw.rect(surf, (30, 30, 30), (title_box.x + dx, title_box.bottom - 7, 6, 3))
 
     draw_text_outline(surf, "FRONTLINE", fonts["title"], WIDTH // 2, 45, cx=True)
-    draw_text_outline(surf, "탱 장 연",    fonts["sub"],   WIDTH // 2, 95, color=YELLOW, cx=True)
 
 
 def draw_background(surf: pygame.Surface, scanline_surf: pygame.Surface) -> None:
