@@ -17,3 +17,14 @@ SCENE_MAIN     = "main"
 SCENE_SETTINGS = "settings"
 SCENE_STORY    = "story"
 SCENE_GAME     = "game"   # TODO: 보스전
+
+# ── 오디오 설정 ───────────────────────────────────────────────
+BGM_VOLUME = 0.4
+
+# ── 인게임 인트로 ─────────────────────────────────────────────
+INTRO_LINES = [
+    "작전 변경... 프로토콜 부분 무시.",
+    "목표: 방어 시스템 ZERO 무력화.",
+    "엔진 가동, 전선(Frontline)으로 진입합니다."
+]
+INTRO_DURATION = 3.5

@@ -9,17 +9,36 @@ from ui.draw        import draw_background, draw_title_bar, draw_corners
 from scenes.main_menu import MainMenuScene
 from scenes.settings  import SettingsScene
 from scenes.story     import StoryScene
+from scenes.game      import GameScene
 
 # ── pygame 초기화 ────────────────────────────────────────────
 pygame.init()
 pygame.mixer.init()
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("탱장연 - TANK FRONT")
+pygame.display.set_caption("탱장연 - FRONTLINE")
 clock = pygame.time.Clock()
 
 fonts   = init_fonts()
 shared  = {}   # 씬 간 공유 상태 (볼륨 등)
+
+# ── BGM 재생 함수 ────────────────────────────────────────────
+from core.constants import BGM_VOLUME
+
+def play_bgm(filepath: str):
+    import os
+    if not os.path.exists(filepath):
+        print(f"[알림] BGM 파일이 없습니다: {filepath}")
+        return
+    try:
+        pygame.mixer.music.load(filepath)
+        pygame.mixer.music.set_volume(BGM_VOLUME)
+        pygame.mixer.music.play(-1)
+    except Exception as e:
+        print(f"[경고] BGM 재생 실패 ({filepath}): {e}")
+
+# 시작 BGM
+play_bgm("assets/audio/bgm_menu.ogg")
 
 # ── 씬 레지스트리 ────────────────────────────────────────────
 def build_scenes():
@@ -27,8 +46,7 @@ def build_scenes():
         SCENE_MAIN:     MainMenuScene(screen, fonts, shared),
         SCENE_SETTINGS: SettingsScene(screen, fonts, shared),
         SCENE_STORY:    StoryScene(screen, fonts, shared),
-        # TODO: 실제 게임 씬 구현 전까지 임시로 스토리 씬으로 라우팅
-        SCENE_GAME:     StoryScene(screen, fonts, shared),
+        SCENE_GAME:     GameScene(screen, fonts, shared),
     }
 
 scenes      = build_scenes()
@@ -56,7 +74,17 @@ while running:
         if scene.next_scene == "quit":
             running = False
         else:
+            prev_key = current_key
             current_key = scene.next_scene
+            
+            # 음악 전환 (메뉴 <-> 인게임)
+            if current_key == SCENE_GAME and prev_key != SCENE_GAME:
+                pygame.mixer.music.fadeout(500)
+                play_bgm("assets/audio/bgm_ingame.ogg")
+            elif current_key == SCENE_MAIN and prev_key == SCENE_GAME:
+                pygame.mixer.music.fadeout(500)
+                play_bgm("assets/audio/bgm_menu.ogg")
+
             # 씬 인스턴스 재생성으로 상태 초기화
             scenes = build_scenes()
             scenes[current_key]  # 새 씬으로 진입
