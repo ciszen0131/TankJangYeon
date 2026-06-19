@@ -1232,18 +1232,18 @@ class GameScene(Scene):
         surf.blit(overlay, (0, 0))
 
         # 상수 리스트(INTRO_LINES)의 내용 수에 맞쬰 박스 높이 계산
-        box_h = 60 + len(INTRO_LINES) * 24
+        box_h = 112 + len(INTRO_LINES) * 24
         box = pygame.Rect(WIDTH // 2 - 250, HEIGHT // 2 - box_h // 2, 500, box_h)
         pygame.draw.rect(surf, BLACK, box)
         draw_box(surf, box, CYAN, 3)
         
         title = self.fonts["title"].render("OPERATION START", False, CYAN)
-        surf.blit(title, (box.centerx - title.get_width() // 2, box.y + 18))
+        surf.blit(title, (box.centerx - title.get_width() // 2, box.y + 22))
         
         # 인트로 텍스트 그리기
         for i, line in enumerate(INTRO_LINES):
             text_surf = self.fonts["small"].render(line, False, GRAY)
-            surf.blit(text_surf, (box.centerx - text_surf.get_width() // 2, box.y + 60 + i * 24))
+            surf.blit(text_surf, (box.centerx - text_surf.get_width() // 2, box.y + 92 + i * 24))
 
     def _draw_center_banner(self, surf: pygame.Surface, text: str, color) -> None:
         box = pygame.Rect(200, 260, 400, 76)
